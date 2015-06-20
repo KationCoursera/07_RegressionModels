@@ -1,0 +1,124 @@
+---
+title: "Regression Models Course Project"
+author: "Jure Bordon"
+date: "Sunday, April 26, 2015"
+output: pdf_document
+fontsize: 10pt
+---
+
+```{r,echo=FALSE,cache=FALSE,results='hide',warning=FALSE,message=FALSE}
+install.packages("ggplot2", repos='http://cran.us.r-project.org')
+library(ggplot2)
+```
+
+# Executive Summary
+
+This report is made for Regression Models Coursera course from the Data Science signature track by Johns Hopkins University. We analyze the mtcars data set and try to determine the relationship of various variables and miles per gallon (MPG). The main questions are:
+
+* Is an automatic or manual transmission better for MPG?
+* Quantify the MPG difference between automatic and manual transmissions!
+
+Our findings show that **manual transmission is** statistically significantly **better than automatic transmission** when it comes to MPG. In addition, we compared several other regression models with different combinations of variables. The conclusion that manual transmission is better holds even for the new models which we tested.
+
+# Analysis
+
+## Is an automatic or manual transmission better for MPG?
+
+First load the data and since we sill be testing different models, we will transform all variables we use to factors:
+
+```{r}
+data(mtcars)
+mtcars$cyl <- factor(mtcars$cyl);mtcars$vs <- factor(mtcars$vs);
+mtcars$gear <- factor(mtcars$gear);mtcars$carb <- factor(mtcars$carb);
+mtcars$am <- factor(mtcars$am,labels=c('Automatic','Manual'))
+```
+
+We explore our data by first plotting a boxplot that shows MPG for automatic and manual tranismission types (see Figure 1 in appendix). This plot shows that manual transmission is more efficient than automatic. In order to quantify our assumption we will construct different linear models.
+
+Before going deeper into analysis, we also check the relationship between all the variables of the dataset (see Figure 2 in appendix). From the plot it is clear that variables `cyl`, `disp`, `hp`, `drat`, `wt`, `vs` and `am` have a strong correlation with `mpg`. We will explore this relationship in the next section.
+
+## Quantifying the MPG difference between automatic and manual transmissions
+
+### Finding the best model
+
+Our base model is constructed using all the variables as predictors. To extract the important vairables we will use the `step` function, which runs `lm` several times to build regression models and select the best variables to build a representative model.
+
+```{r, results='hide'}
+base_model <- lm(mpg ~ ., data = mtcars)
+best_model <- step(base_model, direction = "both")
+```
+
+The best model obtained from `step` function includes variables `cyl`, `wt` and `hp` as confounders, while `am` is the independent variable: 
+
+```{r, size="small"}
+summary(best_model)
+```
+
+The adjusted R^2 value is 0.8401, which means that more than 84% of the variability is explained by the model which includes the above mentioned variables. We can now compare this model to the base model which is constructed using just `am`, to see if these additional variables contribute anything to the model.
+
+```{r}
+simple_model <- lm(mpg ~ am, data = mtcars)
+anova(simple_model, best_model)
+```
+
+The p-value suggests that the model using `am` and three confounder variables is significantly better than the model without the confounder variables. We can conclude that using `cyl`, `wt` and `hp` as confounder variables improves the accuracy of the model which we constructed constructed.
+
+### Inference
+
+In order to confirm that manual (Group 1) and automatic (Group 2) transmissions are different we perform a t-test.
+
+```{r}
+group1 <- mtcars[mtcars$am == "Manual",];group2 <- mtcars[mtcars$am == "Automatic",];
+t.test(group1$mpg,group2$mpg)
+```
+
+With a p-value of 0.001374, we can now be certain that there is a significant difference in the mean MPG between manual and automatic transmission cars.
+
+### Residual plots and diagnostics
+
+In order to dive a bit deeper into our results we can do residual plots and check some of the regression diagnostics of our model (see Figure 3 for residual plots).
+
+Residuals vs Fitted show that points are randomly scattered, which verifies the independence condition. In addition, the Normal Q-Q plot points are mostly on the line which means that residuals are normally distributed. Scale-location plot shows constant variance, since the points are scattered in an even pattern.
+
+To show important leverage points and the most influential measures we compute the top four points:
+
+```{r}
+leverage <- hatvalues(best_model)
+tail(sort(leverage),4)
+
+influential <- dfbetas(best_model)
+tail(sort(influential[,6]),4)
+```
+
+### Conclusion
+
+From `summary(best_model)` we executed before, we can see that cars that have manual transmission will get 1.8 more `mpg` compared to those with automatic transmission when adjusted by `cyl`, `wt` and `hp` (and 7.245 when not adjusted - obtained buy running `summary(simple_model)`). We first saw this by plotting a simple boxplot, confirmed with model building and then making sure that the difference exists by performing a t-test.
+
+# Appendix
+
+Figure 1:
+
+```{r,echo=FALSE,fig.height=3,fig.width=5}
+g = ggplot(mtcars, aes(factor(am), mpg, fill=factor(am)))
+g = g + geom_boxplot()
+g = g + scale_colour_discrete(name = "Type")
+g = g + scale_fill_discrete(name="Type", breaks=c("Automatic", "Manual"),
+                                labels=c("Automatic", "Manual"))
+g = g + scale_x_discrete(breaks=c("Automatic", "Manual"), labels=c("Automatic", "Manual"))
+g = g + xlab("")
+g
+
+```
+
+Figure 2:
+
+```{r,echo=FALSE,fig.height=5,fig.width=6}
+pairs(mtcars, panel = panel.smooth, col = 9 + mtcars$wt)
+```
+
+Figure 3:
+
+```{r,echo=FALSE,fig.height=8,fig.width=7}
+par(mfrow = c(2,2))
+plot(best_model)
+```
